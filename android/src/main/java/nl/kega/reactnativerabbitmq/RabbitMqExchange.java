@@ -50,7 +50,7 @@ public class RabbitMqExchange {
 
     }
 
-    public void publish(String message, String routing_key, ReadableMap message_properties){ 
+    public void publish(String message, String routing_key, ReadableMap message_properties, ReadableMap message_headers){ 
         try {
             byte[] message_body_bytes = message.getBytes();
 
@@ -98,6 +98,23 @@ public class RabbitMqExchange {
 
                  } catch (Exception e){
                     Log.e("RabbitMqExchange", "Exchange publish properties error " + e);
+                    e.printStackTrace();
+                }
+            }
+            
+            if (message_headers != null){
+                 try {
+                 
+                    Map<String, Object> headers = new HashMap<String, Object>();
+                    ReadableMapKeySetIterator iterator = message_headers.keySetIterator();
+                    while (iterator.hasNextKey()) {
+                        String key = iterator.nextKey();
+                        headers.put(key, map.getString(key));
+                    }
+                    properties.headers(headers);
+                    
+                 } catch (Exception e){
+                    Log.e("RabbitMqExchange", "Exchange publish headers error " + e);
                     e.printStackTrace();
                 }
             }
