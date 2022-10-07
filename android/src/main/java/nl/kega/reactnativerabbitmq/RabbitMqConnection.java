@@ -101,8 +101,6 @@ class RabbitMqConnection extends ReactContextBaseJavaModule  {
 
                 WritableMap event = Arguments.createMap();
                 event.putString("name", "error");
-                event.putString("type", "failedtoconnect");
-                event.putString("code", "");
                 event.putString("description", e.getMessage());
 
                 this.context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("RabbitMqConnectionEvent", event);
@@ -275,12 +273,12 @@ class RabbitMqConnection extends ReactContextBaseJavaModule  {
     }
 
     @ReactMethod
-    public void publishToExchange(String message, String exchange_name, String routing_key, ReadableMap message_properties, ReadableMap message_headers) {
+    public void publishToExchange(String messageOrFilePath, boolean isBlob, String exchange_name, String routing_key, ReadableMap message_properties, ReadableMap message_headers) {
 
          for (RabbitMqExchange exchange : exchanges) {
 		    if (Objects.equals(exchange_name, exchange.name)){
-                Log.e("RabbitMqConnection", "Exchange publish: " + message);
-                exchange.publish(message, routing_key, message_properties, message_headers);
+                Log.e("RabbitMqConnection", "Exchange publish: " + messageOrFilePath);
+                exchange.publish(messageOrFilePath, isBlob, routing_key, message_properties, message_headers);
                 return;
             }
 		}
@@ -324,6 +322,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule  {
 
         WritableMap event = Arguments.createMap();
         event.putString("name", "closed");
+        event.putString("description", cause.getMessage());
 
         this.context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("RabbitMqConnectionEvent", event);
     } 

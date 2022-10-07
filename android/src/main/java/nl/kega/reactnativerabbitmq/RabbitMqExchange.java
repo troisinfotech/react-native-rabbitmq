@@ -1,6 +1,14 @@
 package nl.kega.reactnativerabbitmq;
 
+import android.net.Uri;
 import android.util.Log;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -10,6 +18,7 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.ReadableType;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
+import com.facebook.react.bridge.ReadableMapKeySetIterator;
 
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.AMQP;
@@ -29,6 +38,7 @@ public class RabbitMqExchange {
 
     public RabbitMqExchange (ReactApplicationContext context, Channel channel, ReadableMap config){
         
+        this.context = context;
         this.channel = channel;
 
         this.name = config.getString("name");
@@ -45,19 +55,74 @@ public class RabbitMqExchange {
 
         } catch (Exception e){
             Log.e("RabbitMqExchange", "Exchange error " + e);
-            e.printStackTrace();
+            WritableMap event = Arguments.createMap();
+            event.putString("name", "error");
+            event.putString("description", e.getMessage());
+            this.context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("RabbitMqExchangeEvent", event);
         }
 
     }
 
-    public void publish(String message, String routing_key, ReadableMap message_properties, ReadableMap message_headers){ 
+    private Uri getFileUri(String filepath, boolean isDirectoryAllowed) {
+        Uri uri = Uri.parse(filepath);
+        if (uri.getScheme() == null) {
+        // No prefix, assuming that provided path is absolute path to file
+        File file = new File(filepath);
+        if (!isDirectoryAllowed && file.isDirectory()) {
+            throw new IllegalStateException("illegal operation on a directory, read '" + filepath + "'");
+        }
+        uri = Uri.parse("file://" + filepath);
+        }
+        return uri;
+    }
+
+    private InputStream getInputStream(String filepath) {
+        Uri uri = getFileUri(filepath, false);
+        InputStream stream;
         try {
-            byte[] message_body_bytes = message.getBytes();
+        stream = this.context.getContentResolver().openInputStream(uri);
+        } catch (FileNotFoundException ex) {
+            throw new IllegalStateException(ex.getMessage() + ", open '" + filepath + "'");
+        }
+        if (stream == null) {
+            throw new IllegalStateException("Could not open an input stream for '" + filepath + "'");
+        }
+        return stream;
+    }
+
+    private static byte[] getInputStreamBytes(InputStream inputStream) throws IOException {
+        byte[] bytesResult;
+        ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+        int bufferSize = 1024;
+        byte[] buffer = new byte[bufferSize];
+        try {
+            int len;
+            while ((len = inputStream.read(buffer)) != -1) {
+                byteBuffer.write(buffer, 0, len);
+            }
+            bytesResult = byteBuffer.toByteArray();
+        } finally {
+            try {
+                byteBuffer.close();
+            } catch (IOException ignored) { }
+        }
+        return bytesResult;
+    }
+
+    public void publish(String messageOrFilePath, boolean isBlob, String routing_key, ReadableMap message_properties, ReadableMap message_headers){ 
+        try {
+            byte[] message_body_bytes = null;
+            if(isBlob) {
+                InputStream inputStream = getInputStream(messageOrFilePath);
+                message_body_bytes = getInputStreamBytes(inputStream);
+            } else {
+                message_body_bytes = messageOrFilePath.getBytes();
+            }
 
             AMQP.BasicProperties.Builder properties = new AMQP.BasicProperties.Builder();
 
             if (message_properties != null){
-                 try {
+                //  try {
                      
                     if (message_properties.hasKey("content_type") && message_properties.getType("content_type") == ReadableType.String){
                         properties.contentType(message_properties.getString("content_type"));
@@ -96,34 +161,39 @@ public class RabbitMqExchange {
                     //if (message_properties.hasKey("timestamp")){properties.timestamp(message_properties.getBoolean("timestamp"));}
                     //if (message_properties.hasKey("headers")){properties.expiration(message_properties.getBoolean("headers"))}
 
-                 } catch (Exception e){
-                    Log.e("RabbitMqExchange", "Exchange publish properties error " + e);
-                    e.printStackTrace();
-                }
+                //  } catch (Exception e){
+                //     Log.e("RabbitMqExchange", "Exchange publish properties error " + e);
+                //     e.printStackTrace();
+                // }
             }
             
             if (message_headers != null){
-                 try {
+                //  try {
                  
                     Map<String, Object> headers = new HashMap<String, Object>();
                     ReadableMapKeySetIterator iterator = message_headers.keySetIterator();
                     while (iterator.hasNextKey()) {
                         String key = iterator.nextKey();
-                        headers.put(key, map.getString(key));
+                        headers.put(key, message_headers.getString(key));
                     }
                     properties.headers(headers);
                     
-                 } catch (Exception e){
-                    Log.e("RabbitMqExchange", "Exchange publish headers error " + e);
-                    e.printStackTrace();
-                }
+                //  } catch (Exception e){
+                //     Log.e("RabbitMqExchange", "Exchange publish headers error " + e);
+                //     e.printStackTrace();
+                // }
             }
             
             this.channel.basicPublish(this.name, routing_key, properties.build(), message_body_bytes);
         } catch (Exception e){
-            Log.e("RabbitMqExchange", "Exchange publish error " + e);
-            e.printStackTrace();
-
+            Log.e("RabbitMqExchange", "Exchange publish error " + e.getMessage());
+            WritableMap event = Arguments.createMap();
+            event.putString("name", "publish-error");
+            event.putString("description", e.getMessage());
+            if (message_headers != null){
+                event.merge(message_headers);
+            }
+            this.context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("RabbitMqExchangeEvent", event);
         }
 
     }
