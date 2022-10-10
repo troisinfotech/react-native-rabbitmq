@@ -11,6 +11,7 @@ import java.io.InputStream;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentNavigableMap;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReactApplicationContext;
@@ -36,7 +37,9 @@ public class RabbitMqExchange {
 
     private Channel channel;
 
-    public RabbitMqExchange (ReactApplicationContext context, Channel channel, ReadableMap config){
+    private ConcurrentNavigableMap<Long, ReadableMap> outstandingConfirms;
+
+    public RabbitMqExchange (ReactApplicationContext context, Channel channel, ReadableMap config, ConcurrentNavigableMap<Long, ReadableMap> outstandingConfirms) throws IOException {
         
         this.context = context;
         this.channel = channel;
@@ -47,19 +50,11 @@ public class RabbitMqExchange {
         this.autodelete = (config.hasKey("autoDelete") ? config.getBoolean("autoDelete") : false);
         this.internal = (config.hasKey("internal") ? config.getBoolean("internal") : false);
 
+        this.outstandingConfirms = outstandingConfirms;
+        
         Map<String, Object> args = new HashMap<String, Object>();
 
-        try {
-
-            this.channel.exchangeDeclare(this.name, this.type, this.durable, this.autodelete, this.internal, args);
-
-        } catch (Exception e){
-            Log.e("RabbitMqExchange", "Exchange error " + e);
-            WritableMap event = Arguments.createMap();
-            event.putString("name", "error");
-            event.putString("description", e.getMessage());
-            this.context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("RabbitMqExchangeEvent", event);
-        }
+        this.channel.exchangeDeclare(this.name, this.type, this.durable, this.autodelete, this.internal, args);
 
     }
 
@@ -110,6 +105,7 @@ public class RabbitMqExchange {
     }
 
     public void publish(String messageOrFilePath, boolean isBlob, String routing_key, ReadableMap message_properties, ReadableMap message_headers){ 
+        Long sequenceNumber = null;
         try {
             byte[] message_body_bytes = null;
             if(isBlob) {
@@ -121,7 +117,7 @@ public class RabbitMqExchange {
 
             AMQP.BasicProperties.Builder properties = new AMQP.BasicProperties.Builder();
 
-            if (message_properties != null){
+            // if (message_properties != null){
                 //  try {
                      
                     if (message_properties.hasKey("content_type") && message_properties.getType("content_type") == ReadableType.String){
@@ -165,9 +161,9 @@ public class RabbitMqExchange {
                 //     Log.e("RabbitMqExchange", "Exchange publish properties error " + e);
                 //     e.printStackTrace();
                 // }
-            }
+            // }
             
-            if (message_headers != null){
+            // if (message_headers != null){
                 //  try {
                  
                     Map<String, Object> headers = new HashMap<String, Object>();
@@ -177,16 +173,20 @@ public class RabbitMqExchange {
                         headers.put(key, message_headers.getString(key));
                     }
                     properties.headers(headers);
+
+                    sequenceNumber = this.channel.getNextPublishSeqNo();
+                    this.outstandingConfirms.put(sequenceNumber, message_headers);
                     
                 //  } catch (Exception e){
                 //     Log.e("RabbitMqExchange", "Exchange publish headers error " + e);
                 //     e.printStackTrace();
                 // }
-            }
+            // }
             
             this.channel.basicPublish(this.name, routing_key, properties.build(), message_body_bytes);
         } catch (Exception e){
             Log.e("RabbitMqExchange", "Exchange publish error " + e.getMessage());
+            this.outstandingConfirms.remove(sequenceNumber);
             WritableMap event = Arguments.createMap();
             event.putString("name", "publish-error");
             event.putString("description", e.getMessage());

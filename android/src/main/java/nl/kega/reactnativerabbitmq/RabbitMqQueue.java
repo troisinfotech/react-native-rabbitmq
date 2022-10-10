@@ -35,7 +35,7 @@ public class RabbitMqQueue {
     private Channel channel;
     private RabbitMqExchange exchange;
 
-    public RabbitMqQueue (ReactApplicationContext context, Channel channel, ReadableMap queue_config, ReadableMap arguments){
+    public RabbitMqQueue (ReactApplicationContext context, Channel channel, ReadableMap queue_config, ReadableMap arguments) throws IOException {
        
         this.context = context;
         this.channel = channel;
@@ -50,20 +50,13 @@ public class RabbitMqQueue {
      
         Map<String, Object> args = toHashMap(arguments);
 
-        try {
-            RabbitMqConsumer consumer = new RabbitMqConsumer(this.channel, this);
+        RabbitMqConsumer consumer = new RabbitMqConsumer(this.channel, this);
 
-            Map<String, Object> consumer_args = toHashMap(this.consumer_arguments);
+        Map<String, Object> consumer_args = toHashMap(this.consumer_arguments);
 
-            this.channel.queueDeclare(this.name, this.durable, this.exclusive, this.autodelete, args);
-            this.channel.basicConsume(this.name, this.autoack, consumer_args, consumer);
+        this.channel.queueDeclare(this.name, this.durable, this.exclusive, this.autodelete, args);
+        this.channel.basicConsume(this.name, this.autoack, consumer_args, consumer);
 
-         
-
-        } catch (Exception e){
-            Log.e("RabbitMqQueue", "Queue error " + e);
-            e.printStackTrace();
-        }
     }
 
     public void onMessage(WritableMap message){
