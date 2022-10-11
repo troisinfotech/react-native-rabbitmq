@@ -108,6 +108,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
                 this.connection = (RecoverableConnection) this.factory.newConnection();
             } catch (Exception e) {
 
+                Log.e("RabbitMqConnection", "Connect error " + e);
                 WritableMap event = Arguments.createMap();
                 event.putString("name", "error");
                 event.putString("description", e.getMessage());
@@ -316,7 +317,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
 
         for (RabbitMqExchange exchange: exchanges) {
             if (Objects.equals(exchange_name, exchange.name)) {
-                Log.e("RabbitMqConnection", "Exchange publish: " + messageOrFilePath);
+                Log.i("RabbitMqConnection", "Exchange publish: " + messageOrFilePath);
                 exchange.publish(messageOrFilePath, isBlob, routing_key, message_properties, message_headers);
                 return;
             }
@@ -367,7 +368,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
     }
 
     private void onRecovered() {
-        Log.e("RabbitMqConnection", "Recovered");
+        Log.i("RabbitMqConnection", "Recovered");
 
         WritableMap event = Arguments.createMap();
         event.putString("name", "reconnected");

@@ -185,7 +185,7 @@ public class RabbitMqExchange {
             
             this.channel.basicPublish(this.name, routing_key, properties.build(), message_body_bytes);
         } catch (Exception e){
-            Log.e("RabbitMqExchange", "Exchange publish error " + e.getMessage());
+            Log.e("RabbitMqExchange", "Exchange publish error " + e);
             this.outstandingConfirms.remove(sequenceNumber);
             WritableMap event = Arguments.createMap();
             event.putString("name", "publish-error");
