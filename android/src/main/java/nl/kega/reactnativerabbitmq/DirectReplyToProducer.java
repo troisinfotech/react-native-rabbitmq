@@ -3,8 +3,6 @@ package nl.kega.reactnativerabbitmq;
 import android.os.Bundle;
 import android.util.Log;
 
-import java.io.IOException;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -16,10 +14,8 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.ReadableMapKeySetIterator;
 
-import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.DefaultConsumer;
-import com.rabbitmq.client.Envelope;
+import com.rabbitmq.client.AMQP;
 
 import org.json.JSONObject;
 
@@ -49,17 +45,16 @@ public class DirectReplyToProducer {
                 .replyTo(replyQueue)
                 .build();
             final CompletableFuture<String> completableFuture = new CompletableFuture<>();
-            String ctag = this.channel.basicConsume(replyQueue, true, new DefaultConsumer(channel) {
-                @Override
-                public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
-                    completableFuture.complete(new String(body, "UTF-8"));
-                }
+            String ctag = this.channel.basicConsume(replyQueue, true, (consumerTag, delivery) -> {
+                completableFuture.complete(new String(delivery.getBody(), "UTF-8"));
+            }, consumerTag -> {
             });
             this.channel.basicPublish("", routingKey, props, message.getBytes("UTF-8"));
             String response = completableFuture.get();
             this.channel.basicCancel(ctag);
             JSONObject jsonObject = new JSONObject(response);
-            Bundle bundle = BundleJSONConverter.convertToBundle(jsonObject);
+            BundleJSONConverter bundleJSONConverter = new BundleJSONConverter();
+            Bundle bundle = bundleJSONConverter.convertToBundle(jsonObject);
             WritableMap map = Arguments.fromBundle(bundle);
             promise.resolve(map);
         } catch (Exception e){
