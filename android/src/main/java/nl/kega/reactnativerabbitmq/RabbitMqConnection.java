@@ -17,7 +17,6 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Callback;
-import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
@@ -45,8 +44,6 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
     private Channel channel;
 
     private Callback status;
-
-    private DirectReplyToProducer directReplyToProducer;
 
     private ArrayList < RabbitMqQueue > queues = new ArrayList < RabbitMqQueue > ();
     private ArrayList < RabbitMqExchange > exchanges = new ArrayList < RabbitMqExchange > ();
@@ -172,8 +169,6 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
                         }
 
                     });
-
-                    this.directReplyToProducer = new DirectReplyToProducer(this.context, this.channel);
 
                     WritableMap event = Arguments.createMap();
                     event.putString("name", "connected");
@@ -338,17 +333,6 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
                 exchange.delete(if_unused);
                 return;
             }
-        }
-
-    }
-
-    @ReactMethod
-    public void publishDirectReplyToProducer(ReadableMap headers, String message, String routingKey, Promise promise) {
-
-        if (this.directReplyToProducer != null) {
-            this.directReplyToProducer.publish(headers, message, routingKey, promise);
-        } else {
-            promise.reject("RabbitMqConnection", "directReplyToProducer object is null");
         }
 
     }
