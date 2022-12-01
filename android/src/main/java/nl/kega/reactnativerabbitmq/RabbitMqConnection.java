@@ -17,6 +17,7 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Callback;
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
@@ -42,6 +43,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
     private ConnectionFactory factory = null;
     private RecoverableConnection connection;
     private Channel channel;
+    private Channel directReplyToChannel;
 
     private Callback status;
 
@@ -169,6 +171,8 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
                         }
 
                     });
+
+                    this.directReplyToChannel = connection.createChannel();
 
                     WritableMap event = Arguments.createMap();
                     event.putString("name", "connected");
@@ -307,18 +311,29 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
     @ReactMethod
     public void addExchange(ReadableMap exchange_config) throws IOException {
 
-        RabbitMqExchange exchange = new RabbitMqExchange(this.context, this.channel, exchange_config, this.outstandingConfirms);
+        RabbitMqExchange exchange = new RabbitMqExchange(this.context, this.channel, this.directReplyToChannel, exchange_config, this.outstandingConfirms);
         this.exchanges.add(exchange);
 
     }
 
     @ReactMethod
-    public void publishToExchange(String messageOrFilePath, boolean isBlob, String exchange_name, String routing_key, ReadableMap message_properties, ReadableMap message_headers) {
+    public void publishExchange(String messageOrFilePath, boolean isBlob, String exchange_name, String routing_key, ReadableMap message_properties, ReadableMap message_headers) {
 
         for (RabbitMqExchange exchange: exchanges) {
             if (Objects.equals(exchange_name, exchange.name)) {
-                Log.i("RabbitMqConnection", "Exchange publish: " + messageOrFilePath);
                 exchange.publish(messageOrFilePath, isBlob, routing_key, message_properties, message_headers);
+                return;
+            }
+        }
+
+    }
+
+    @ReactMethod
+    public void directReplyToExchange(String exchangeName, String routingKey, ReadableMap headers, ReadableMap properties, String message, Promise promise) {
+
+        for (RabbitMqExchange exchange: exchanges) {
+            if (Objects.equals(exchangeName, exchange.name)) {
+                exchange.directReplyTo(routingKey, headers, properties, message, promise);
                 return;
             }
         }

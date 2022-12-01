@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 
 import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
@@ -21,11 +22,16 @@ import com.facebook.react.bridge.ReadableType;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.facebook.react.bridge.ReadableMapKeySetIterator;
 
-import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.AMQP;
-import com.rabbitmq.client.AlreadyClosedException;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.DefaultConsumer;
+import com.rabbitmq.client.Envelope;
+
+import org.json.JSONObject;
 
 public class RabbitMqExchange {
+
+    private static final String directReplyToQueue = "amq.rabbitmq.reply-to";
 
     public String name;
     public String type;
@@ -36,13 +42,15 @@ public class RabbitMqExchange {
     private ReactApplicationContext context;
 
     private Channel channel;
+    private Channel directReplyToChannel;
 
     private ConcurrentNavigableMap<Long, ReadableMap> outstandingConfirms;
 
-    public RabbitMqExchange (ReactApplicationContext context, Channel channel, ReadableMap config, ConcurrentNavigableMap<Long, ReadableMap> outstandingConfirms) throws IOException {
+    public RabbitMqExchange (ReactApplicationContext context, Channel channel, Channel directReplyToChannel, ReadableMap config, ConcurrentNavigableMap<Long, ReadableMap> outstandingConfirms) throws IOException {
         
         this.context = context;
         this.channel = channel;
+        this.directReplyToChannel = directReplyToChannel;
 
         this.name = config.getString("name");
         this.type = (config.hasKey("type") ? config.getString("type") : "fanout");
@@ -196,6 +204,37 @@ public class RabbitMqExchange {
             this.context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("RabbitMqExchangeEvent", event);
         }
 
+    }
+
+    public void directReplyTo(String routingKey, ReadableMap headers, ReadableMap properties, String message, Promise promise) {
+        try {
+            AMQP.BasicProperties.Builder amqpPropertiesBuilder = new AMQP.BasicProperties.Builder();
+            amqpPropertiesBuilder.headers(MapUtils.toHashMap(headers));
+            amqpPropertiesBuilder.replyTo(directReplyToQueue);
+            if (properties.hasKey("delivery_mode") && properties.getType("delivery_mode") == ReadableType.Number) {
+                amqpPropertiesBuilder.deliveryMode(properties.getInt("delivery_mode"));
+            }
+            this.directReplyToChannel.basicConsume(directReplyToQueue, true, new DefaultConsumer(channel) {
+                @Override
+                public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties amqpProperties, byte[] body) throws IOException {
+                    String response = new String(body, "UTF-8");
+                    try {
+                        JSONObject jsonObject = new JSONObject(response);
+                        WritableMap result = MapUtils.convertJsonToMap(jsonObject);
+                        promise.resolve(result);
+                    } catch(Exception e) {
+                        Log.e("RabbitMqExchange", "RabbitMqExchange direct reply-to consume error: " + e.getMessage());
+                        promise.reject("RabbitMqExchange", "RabbitMqExchange direct reply-to consume error: " + e.getMessage(), e);
+                    } finally {
+                        directReplyToChannel.basicCancel(consumerTag);
+                    }
+                }
+            });
+            this.directReplyToChannel.basicPublish(this.name, routingKey, amqpPropertiesBuilder.build(), message.getBytes("UTF-8"));
+        } catch (Exception e) {
+            Log.e("RabbitMqExchange", "RabbitMqExchange direct reply-to publish error: " + e.getMessage());
+            promise.reject("RabbitMqExchange", "RabbitMqExchange direct reply-to publish error: " + e.getMessage(), e);
+        }
     }
 
     public void delete(Boolean ifUnused){ 
