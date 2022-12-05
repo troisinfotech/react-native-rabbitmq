@@ -22,9 +22,9 @@ import java.util.concurrent.TimeUnit;
 
 import org.json.JSONObject;
 
-public class DirectReplyToWorker implements Runnable {
+public class RPCWorker implements Runnable {
 
-    private static final String directReplyToQueue = "amq.rabbitmq.reply-to";
+    private static final String rpcQueue = "amq.rabbitmq.reply-to";
 
     private RabbitMqExchange exchange;
     private String routingKey; 
@@ -34,9 +34,9 @@ public class DirectReplyToWorker implements Runnable {
     private Promise promise;
     private String consumerTag;
 
-    public DirectReplyToWorker() {}
+    public RPCWorker() {}
 
-    public DirectReplyToWorker(RabbitMqExchange exchange, String routingKey, ReadableMap headers, ReadableMap properties, String message, Promise promise) {
+    public RPCWorker(RabbitMqExchange exchange, String routingKey, ReadableMap headers, ReadableMap properties, String message, Promise promise) {
         this.exchange = exchange;
         this.routingKey = routingKey;
         this.headers = headers;
@@ -51,34 +51,34 @@ public class DirectReplyToWorker implements Runnable {
         try {
             AMQP.BasicProperties.Builder amqpPropertiesBuilder = new AMQP.BasicProperties.Builder();
             amqpPropertiesBuilder.headers(MapUtils.toHashMap(headers));
-            amqpPropertiesBuilder.replyTo(directReplyToQueue);
+            amqpPropertiesBuilder.replyTo(rpcQueue);
             if (properties.hasKey("delivery_mode") && properties.getType("delivery_mode") == ReadableType.Number) {
                 amqpPropertiesBuilder.deliveryMode(properties.getInt("delivery_mode"));
             }
             final CompletableFuture<String> response = new CompletableFuture<>();
-            consumerTag = exchange.directReplyToChannel.basicConsume(directReplyToQueue, true, new DefaultConsumer(exchange.directReplyToChannel) {
+            consumerTag = exchange.rpcChannel.basicConsume(rpcQueue, true, new DefaultConsumer(exchange.rpcChannel) {
                 @Override
                 public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties amqpProperties, byte[] body) throws IOException {
                     response.complete(new String(body, "UTF-8"));
                 }
             });
-            exchange.directReplyToChannel.basicPublish(exchange.name, routingKey, amqpPropertiesBuilder.build(), message.getBytes("UTF-8"));
+            exchange.rpcChannel.basicPublish(exchange.name, routingKey, amqpPropertiesBuilder.build(), message.getBytes("UTF-8"));
             String data = response.get(exchange.rpcTimeout, TimeUnit.SECONDS);
             JSONObject jsonObject = new JSONObject(data);
             WritableMap result = MapUtils.convertJsonToMap(jsonObject);
             promise.resolve(result);
         } catch (TimeoutException e) {
-            Log.e("DirectReplyToWorker", "Error: RPC timeout");
-            promise.reject("DirectReplyToWorker", "Error: RPC timeout");
+            Log.e("RPCWorker", "Error: RPC timeout");
+            promise.reject("RPCWorker", "Error: RPC timeout");
         } catch (Exception e) {
-            Log.e("DirectReplyToWorker", "Error: " + e.getMessage());
-            promise.reject("DirectReplyToWorker", "Error: " + e.getMessage());
+            Log.e("RPCWorker", "Error: " + e.getMessage());
+            promise.reject("RPCWorker", "Error: " + e.getMessage());
         } finally {
             if (!isNull(consumerTag)) { 
                 try {
-                    exchange.directReplyToChannel.basicCancel(consumerTag);
+                    exchange.rpcChannel.basicCancel(consumerTag);
                 } catch (Exception e) {
-                    Log.e("DirectReplyToWorker", "Error: " + e.getMessage());
+                    Log.e("RPCWorker", "Error: " + e.getMessage());
                 }
             }
         }

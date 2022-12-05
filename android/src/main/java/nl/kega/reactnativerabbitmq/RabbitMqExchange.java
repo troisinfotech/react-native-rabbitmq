@@ -13,7 +13,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
@@ -39,17 +38,18 @@ public class RabbitMqExchange {
     private ReactApplicationContext context;
 
     public Channel channel;
-    public Channel directReplyToChannel;
-
-    private ConcurrentNavigableMap<Long, ReadableMap> outstandingConfirms;
+    public Channel rpcChannel;
 
     private ExecutorService executorService;
 
-    public RabbitMqExchange (ReactApplicationContext context, Channel channel, Channel directReplyToChannel, ReadableMap config, ConcurrentNavigableMap<Long, ReadableMap> outstandingConfirms) throws IOException {
+    private ConcurrentNavigableMap<Long, ReadableMap> outstandingConfirms;
+
+    public RabbitMqExchange (ReactApplicationContext context, Channel channel, Channel rpcChannel, ExecutorService executorService, ConcurrentNavigableMap<Long, ReadableMap> outstandingConfirms, ReadableMap config) throws IOException {
         
         this.context = context;
         this.channel = channel;
-        this.directReplyToChannel = directReplyToChannel;
+        this.rpcChannel = rpcChannel;
+        this.executorService = executorService;
 
         this.name = config.getString("name");
         this.type = (config.hasKey("type") ? config.getString("type") : "fanout");
@@ -59,8 +59,6 @@ public class RabbitMqExchange {
         this.rpcTimeout = (config.hasKey("rpcTimeout") ? config.getInt("rpcTimeout") : 10);
 
         this.outstandingConfirms = outstandingConfirms;
-
-        this.executorService = Executors.newSingleThreadExecutor();
         
         Map<String, Object> args = new HashMap<String, Object>();
 
@@ -208,8 +206,8 @@ public class RabbitMqExchange {
 
     }
 
-    public void directReplyTo(String routingKey, ReadableMap headers, ReadableMap properties, String message, Promise promise) {
-        executorService.execute(new DirectReplyToWorker(this, routingKey, headers, properties, message, promise));
+    public void rpc(String routingKey, ReadableMap headers, ReadableMap properties, String message, Promise promise) {
+        executorService.execute(new RPCWorker(this, routingKey, headers, properties, message, promise));
     }
 
     public void delete(Boolean ifUnused){ 

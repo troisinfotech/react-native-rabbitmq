@@ -9,6 +9,8 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
@@ -43,9 +45,11 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
     private ConnectionFactory factory = null;
     private RecoverableConnection connection;
     private Channel channel;
-    private Channel directReplyToChannel;
+    private Channel rpcChannel;
 
     private Callback status;
+    
+    private ExecutorService executorService;
 
     private ArrayList < RabbitMqQueue > queues = new ArrayList < RabbitMqQueue > ();
     private ArrayList < RabbitMqExchange > exchanges = new ArrayList < RabbitMqExchange > ();
@@ -56,6 +60,8 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
         super(reactContext);
 
         this.context = reactContext;
+
+        this.executorService = Executors.newSingleThreadExecutor();
 
     }
 
@@ -172,7 +178,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
 
                     });
 
-                    this.directReplyToChannel = connection.createChannel();
+                    this.rpcChannel = connection.createChannel();
 
                     WritableMap event = Arguments.createMap();
                     event.putString("name", "connected");
@@ -311,7 +317,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
     @ReactMethod
     public void addExchange(ReadableMap exchange_config) throws IOException {
 
-        RabbitMqExchange exchange = new RabbitMqExchange(this.context, this.channel, this.directReplyToChannel, exchange_config, this.outstandingConfirms);
+        RabbitMqExchange exchange = new RabbitMqExchange(this.context, this.channel, this.rpcChannel, this.executorService, this.outstandingConfirms, exchange_config);
         this.exchanges.add(exchange);
 
     }
@@ -333,7 +339,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
 
         for (RabbitMqExchange exchange: exchanges) {
             if (Objects.equals(exchangeName, exchange.name)) {
-                exchange.directReplyTo(routingKey, headers, properties, message, promise);
+                exchange.rpc(routingKey, headers, properties, message, promise);
                 return;
             }
         }
