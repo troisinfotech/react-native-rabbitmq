@@ -35,7 +35,9 @@ public class MapUtils {
         while (iterator.hasNext()) {
             String key = iterator.next();
             Object value = jsonObject.get(key);
-            if (value instanceof JSONObject) {
+            if (JSONObject.NULL.equals(value)) {
+                map.putNull(key);
+            } else if (value instanceof JSONObject) {
                 map.putMap(key, convertJsonToMap((JSONObject) value));
             } else if (value instanceof JSONArray) {
                 map.putArray(key, convertJsonToArray((JSONArray) value));
@@ -63,7 +65,9 @@ public class MapUtils {
 
         for (int i = 0; i < jsonArray.length(); i++) {
             Object value = jsonArray.get(i);
-            if (value instanceof JSONObject) {
+            if (JSONObject.NULL.equals(value)) {
+                array.pushNull();
+            } else if (value instanceof JSONObject) {
                 array.pushMap(convertJsonToMap((JSONObject) value));
             } else if (value instanceof JSONArray) {
                 array.pushArray(convertJsonToArray((JSONArray) value));

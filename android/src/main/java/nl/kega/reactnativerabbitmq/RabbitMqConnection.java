@@ -335,7 +335,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void directReplyToExchange(String exchangeName, String routingKey, ReadableMap headers, ReadableMap properties, String message, Promise promise) {
+    public void rpcExchange(String exchangeName, String routingKey, ReadableMap headers, ReadableMap properties, String message, Promise promise) {
 
         for (RabbitMqExchange exchange: exchanges) {
             if (Objects.equals(exchangeName, exchange.name)) {
