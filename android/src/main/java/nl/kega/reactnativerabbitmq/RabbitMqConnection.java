@@ -366,6 +366,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
             this.exchanges = new ArrayList < RabbitMqExchange > ();
 
             this.channel.close();
+            this.rpcChannel.close();
 
             this.connection.close();
         } catch (Exception e) {
@@ -375,6 +376,7 @@ class RabbitMqConnection extends ReactContextBaseJavaModule {
             this.connection = null;
             this.factory = null;
             this.channel = null;
+            this.rpcChannel = null;
         }
     }
 
